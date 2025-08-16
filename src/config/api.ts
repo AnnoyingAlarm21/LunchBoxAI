@@ -29,17 +29,17 @@ export const API_CONFIG = {
   
   // Discord OAuth via Supabase
   DISCORD: {
-    CLIENT_ID: '', // Add your Discord client ID here
-    CLIENT_SECRET: '', // Add your Discord client secret here
-    REDIRECT_URI: 'https://caxkvknseivgyfuddlym.supabase.co/auth/v1/callback',
+    CLIENT_ID: process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || '',
+    CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET || '',
+    REDIRECT_URI: process.env.NEXT_PUBLIC_SUPABASE_URL ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/callback` : '',
     SCOPES: ['identify', 'guilds']
   },
   
   // Spotify OAuth (will use Vercel URL)
   SPOTIFY: {
-    CLIENT_ID: '', // Add your Spotify client ID here
-    CLIENT_SECRET: '', // Add your Spotify client secret here
-    REDIRECT_URI: '', // Will be set to Vercel URL when deployed
+    CLIENT_ID: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID || '',
+    CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET || '',
+    REDIRECT_URI: process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/spotify/callback` : '',
     SCOPES: [
       'user-read-private',
       'user-read-email',

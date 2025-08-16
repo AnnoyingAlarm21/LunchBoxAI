@@ -31,6 +31,26 @@ export const auth = {
     return { data, error };
   },
 
+  // Sign in with Spotify
+  signInWithSpotify: async () => {
+    const redirectUrl = process.env.NODE_ENV === 'development' 
+      ? 'http://localhost:3000/auth/callback'
+      : 'https://lunch-box-ai.vercel.app/auth/callback';
+    
+    console.log('Supabase Spotify OAuth - redirectUrl:', redirectUrl);
+    console.log('Supabase client URL:', supabaseUrl);
+    
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'spotify',
+      options: {
+        redirectTo: redirectUrl
+      }
+    });
+    
+    console.log('Supabase OAuth response:', { data, error });
+    return { data, error };
+  },
+
   // Sign out
   signOut: async () => {
     const { error } = await supabase.auth.signOut();

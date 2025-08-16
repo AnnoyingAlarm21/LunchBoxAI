@@ -25,6 +25,7 @@ export default function Home() {
   const [musicSuggestions, setMusicSuggestions] = useState<SpotifyTrack[]>([]);
   const [showMusicPlayer, setShowMusicPlayer] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [spotifyAuthenticated, setSpotifyAuthenticated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -42,7 +43,7 @@ export default function Home() {
       setUserProfile(existingProfile);
       // Add welcome back message
       const welcomeBackMessage: Message = {
-        id: Date.now().toString(),
+        id: `welcome-back-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         text: "Welcome back! What's on your plate today?",
         sender: 'ai',
         timestamp: new Date()
@@ -51,7 +52,7 @@ export default function Home() {
     } else {
       // Start onboarding in chat
       const onboardingMessage: Message = {
-        id: Date.now().toString(),
+        id: `onboarding-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         text: "Hey! I'm your Lunchbox.ai buddy. Let me get to know you first. Do you play sports?",
         sender: 'ai',
         timestamp: new Date()
@@ -76,15 +77,119 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Check Spotify authentication status
+  useEffect(() => {
+    const checkSpotifyAuth = async () => {
+      try {
+        const isAuth = await spotifyService.isAuthenticated();
+        console.log('Setting Spotify auth state:', isAuth);
+        setSpotifyAuthenticated(isAuth);
+      } catch (error) {
+        console.error('Error checking Spotify auth:', error);
+        setSpotifyAuthenticated(false);
+      }
+    };
+    
+    checkSpotifyAuth();
+    
+    // Also check when the page becomes visible (after OAuth redirect)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        setTimeout(checkSpotifyAuth, 1000); // Check after 1 second
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user]); // Re-check when user changes
+
+  // Check for OAuth redirects and refresh auth status
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const authSuccess = urlParams.get('auth');
+    const error = urlParams.get('error');
+    const code = urlParams.get('code');
+    
+    console.log('Checking OAuth params:', { authSuccess, error, code });
+    
+    if (authSuccess === 'success' || code) {
+      console.log('OAuth success detected, clearing URL and refreshing auth');
+      // Clear URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Refresh authentication status after a short delay
+      setTimeout(async () => {
+        try {
+          const isAuth = await spotifyService.isAuthenticated();
+          console.log('Auth refresh result:', isAuth);
+          setSpotifyAuthenticated(isAuth);
+          
+          if (isAuth) {
+            // Show success message
+            const successMessage: Message = {
+              id: `spotify-success-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              text: "🎵 Spotify connected successfully! Now I can suggest music for you!",
+              sender: 'ai',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, successMessage]);
+          }
+        } catch (error) {
+          console.error('Error refreshing auth status:', error);
+        }
+      }, 2000); // Increased delay to 2 seconds
+    } else if (error) {
+      console.log('OAuth error detected:', error);
+      // Clear URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Show error message
+      const errorMessage: Message = {
+        id: `oauth-error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        text: `❌ Spotify connection was cancelled. Let's try again!`,
+        sender: 'ai',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    }
+  }, []);
+
+  const handleConnectSpotify = async () => {
+    try {
+      console.log('Starting Spotify OAuth...');
+      console.log('Current environment:', process.env.NODE_ENV);
+      console.log('Current origin:', window.location.origin);
+      
+      const { data, error } = await auth.signInWithSpotify();
+      
+      if (error) {
+        console.error('Spotify OAuth error:', error);
+      } else {
+        console.log('Spotify OAuth initiated:', data);
+        // Check if we need to redirect
+        if (data?.url) {
+          console.log('Full redirect URL:', data.url);
+          console.log('About to redirect...');
+          // Use window.open for OAuth to avoid redirect issues
+          window.open(data.url, '_self');
+        } else {
+          console.log('No redirect URL received from OAuth');
+        }
+      }
+    } catch (error) {
+      console.error('Error connecting to Spotify:', error);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputText,
-      sender: 'user',
-      timestamp: new Date()
-    };
+            const userMessage: Message = {
+          id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          text: inputText,
+          sender: 'user',
+          timestamp: new Date()
+        };
 
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
@@ -133,7 +238,7 @@ export default function Home() {
         const aiResponse = await groqService.chat(groqMessages);
         
         const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
+          id: `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           text: aiResponse,
           sender: 'ai',
           timestamp: new Date()
@@ -201,19 +306,61 @@ export default function Home() {
 
   // Check if user input is music-related and get suggestions
   const checkForMusicRequest = async (userInput: string) => {
-    const musicKeywords = ['music', 'song', 'playlist', 'spotify', 'listen', 'sound', 'beat', 'rhythm', 'melody', 'tune'];
+    const musicKeywords = ['music', 'song', 'playlist', 'spotify', 'listen', 'sound', 'beat', 'rhythm', 'melody', 'tune', 'play', 'sing', 'dance', 'jam', 'vibes', 'mood', 'energy'];
     const hasMusicKeyword = musicKeywords.some(keyword => userInput.toLowerCase().includes(keyword));
     
-    if (hasMusicKeyword && spotifyService.isAuthenticated()) {
-      try {
-        const suggestions = await spotifyService.getMusicSuggestions(userInput);
-        if (suggestions.length > 0) {
-          setMusicSuggestions(suggestions);
-          setShowMusicPlayer(true);
+    if (hasMusicKeyword) {
+      if (spotifyAuthenticated) {
+        try {
+          const suggestions = await spotifyService.getMusicSuggestions(userInput);
+          if (suggestions.length > 0) {
+            setMusicSuggestions(suggestions);
+            setShowMusicPlayer(true);
+            
+            // Add AI message about the music suggestions
+            const musicMessage: Message = {
+              id: `music-suggestions-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              text: `🎵 Great idea! Here are some songs that might match your vibe. You can play them directly or save them to a playlist!`,
+              sender: 'ai',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, musicMessage]);
+            
+            return true;
+          } else {
+            // No suggestions found
+            const noMusicMessage: Message = {
+              id: `no-music-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              text: `🎵 I couldn't find any songs matching "${userInput}". Try asking for a different type of music!`,
+              sender: 'ai',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, noMusicMessage]);
+            return true;
+          }
+        } catch (error) {
+          console.error('Error getting music suggestions:', error);
+          
+          // Show error message to user
+          const errorMessage: Message = {
+            id: Date.now().toString(),
+            text: `❌ Sorry, I couldn't get music suggestions right now. The error was: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            sender: 'ai',
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, errorMessage]);
           return true;
         }
-      } catch (error) {
-        console.error('Error getting music suggestions:', error);
+      } else {
+        // User wants music but Spotify isn't connected
+        const connectMessage: Message = {
+          id: Date.now().toString(),
+          text: `🎵 I'd love to suggest some music for you! First, let's connect your Spotify account so I can find the perfect songs. Click "Connect Spotify" in the header!`,
+          sender: 'ai',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, connectMessage]);
+        return true;
       }
     }
     return false;
@@ -235,7 +382,7 @@ export default function Home() {
       if (playlistUrl) {
         // Add message about playlist creation
         const playlistMessage: Message = {
-          id: Date.now().toString(),
+          id: `playlist-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           text: `I've created a Spotify playlist for you! Check it out: ${playlistUrl}`,
           sender: 'ai',
           timestamp: new Date()
@@ -260,13 +407,61 @@ export default function Home() {
           </div>
           
           <div className="flex items-center space-x-2">
-            {!spotifyService.isAuthenticated() && (
-              <button
-                onClick={() => spotifyService.authenticate()}
-                className="px-3 py-2 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-              >
-                Connect Spotify
-              </button>
+            {!spotifyAuthenticated ? (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleConnectSpotify}
+                  className="px-3 py-2 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                >
+                  Connect Spotify
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const isAuth = await spotifyService.isAuthenticated();
+                      console.log('Manual refresh - Spotify auth:', isAuth);
+                      setSpotifyAuthenticated(isAuth);
+                    } catch (error) {
+                      console.error('Error during manual refresh:', error);
+                    }
+                  }}
+                  className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+                  title="Refresh Spotify connection status"
+                >
+                  🔄
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <span className="text-green-600 text-sm font-medium">🎵 Spotify Connected</span>
+                <button
+                  onClick={async () => {
+                    try {
+                      // Sign out from Supabase (which includes Spotify)
+                      const { error } = await auth.signOut();
+                      if (error) {
+                        console.error('Error signing out from Spotify:', error);
+                      } else {
+                        // Update UI state
+                        setSpotifyAuthenticated(false);
+                        // Show disconnect message
+                                const disconnectMessage: Message = {
+          id: `spotify-disconnect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          text: "🎵 Disconnected from Spotify. You can reconnect anytime!",
+          sender: 'ai',
+          timestamp: new Date()
+        };
+                        setMessages(prev => [...prev, disconnectMessage]);
+                      }
+                    } catch (error) {
+                      console.error('Error during Spotify sign out:', error);
+                    }
+                  }}
+                  className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                >
+                  Sign Out Spotify
+                </button>
+              </div>
             )}
             
             {!user ? (
