@@ -11,24 +11,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const auth = {
   // Sign in with Google
   signInWithGoogle: async () => {
-    // Always use the production URL in production
-    let redirectUrl;
-    
-    if (typeof window !== 'undefined') {
-      // Check if we're on localhost
-      if (window.location.origin.includes('localhost')) {
-        // Use localhost for development
-        redirectUrl = `${window.location.origin}/auth/callback`;
-      } else {
-        // Use production URL for production
-        redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
-      }
-    } else {
-      // Fallback to production URL
-      redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
-    }
-    
-    console.log('Google OAuth redirectUrl:', redirectUrl);
+    // HARDCODED PRODUCTION URL - This is the most reliable solution
+    const redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
+    console.log('Google OAuth redirectUrl (HARDCODED):', redirectUrl);
       
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -41,24 +26,9 @@ export const auth = {
 
   // Sign in with Discord
   signInWithDiscord: async () => {
-    // Always use the production URL in production
-    let redirectUrl;
-    
-    if (typeof window !== 'undefined') {
-      // Check if we're on localhost
-      if (window.location.origin.includes('localhost')) {
-        // Use localhost for development
-        redirectUrl = `${window.location.origin}/auth/callback`;
-      } else {
-        // Use production URL for production
-        redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
-      }
-    } else {
-      // Fallback to production URL
-      redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
-    }
-    
-    console.log('Discord OAuth redirectUrl:', redirectUrl);
+    // HARDCODED PRODUCTION URL - This is the most reliable solution
+    const redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
+    console.log('Discord OAuth redirectUrl (HARDCODED):', redirectUrl);
       
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'discord',

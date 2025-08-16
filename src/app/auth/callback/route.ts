@@ -6,16 +6,9 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
   const error = searchParams.get('error');
   
-  // Get the base URL from the request or use the production URL
-  let baseUrl = url.protocol + '//' + url.host;
-  
-  // Force production URL if we detect we're on localhost
-  if (baseUrl.includes('localhost')) {
-    console.log('Detected localhost in callback, forcing redirect to production URL');
-    baseUrl = 'https://lunch-box-ai.vercel.app';
-  }
-  
-  console.log('Using base URL for redirect:', baseUrl);
+  // ALWAYS use production URL for redirects - no exceptions
+  const baseUrl = 'https://lunch-box-ai.vercel.app';
+  console.log('HARDCODED production URL for redirect:', baseUrl);
 
   console.log('Auth callback received:', { code: !!code, error, url: request.url });
 
