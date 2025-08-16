@@ -197,6 +197,20 @@ export default function Home() {
 
   // Spotify functionality removed
 
+  // DIRECT GOOGLE LOGIN - Bypass Supabase
+  const handleDirectGoogleLogin = () => {
+    // Directly redirect to Google OAuth
+    const clientId = '469811368622-9i9sdihjmb7akcd0q18jcjmcmh6o73ev.apps.googleusercontent.com';
+    const redirectUri = 'https://lunch-box-ai.vercel.app/auth/callback';
+    const scope = 'email profile';
+    const responseType = 'code';
+    
+    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=${responseType}&scope=${encodeURIComponent(scope)}`;
+    
+    console.log('Direct Google login URL:', googleAuthUrl);
+    window.location.href = googleAuthUrl;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col">
       {/* Header */}
@@ -210,21 +224,20 @@ export default function Home() {
           </div>
           
           <div className="flex items-center space-x-2">
-            
             {!user ? (
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => auth.signInWithGoogle()}
+                  onClick={handleDirectGoogleLogin}
                   className="px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                 >
-                  Sign in with Google
+                  Sign in with Google (Direct)
                 </button>
-                <button
-                  onClick={() => auth.signInWithDiscord()}
+                <a 
+                  href="https://caxkvknseivgyfuddlym.supabase.co/auth/v1/authorize?provider=discord&redirect_to=https://lunch-box-ai.vercel.app/auth/callback"
                   className="px-3 py-2 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
                 >
-                  Sign in with Discord
-                </button>
+                  Sign in with Discord (Direct)
+                </a>
               </div>
             ) : (
               <div className="flex items-center space-x-2">
