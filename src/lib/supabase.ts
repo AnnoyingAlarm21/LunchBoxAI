@@ -11,11 +11,23 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const auth = {
   // Sign in with Google
   signInWithGoogle: async () => {
-    // Use the current URL's origin for the redirect
-    const redirectUrl = typeof window !== 'undefined' 
-      ? `${window.location.origin}/auth/callback` 
-      : (process.env.NEXT_PUBLIC_APP_URL || 'https://lunch-box-ai.vercel.app') + '/auth/callback';
-      
+    // Always use the production URL in production
+    let redirectUrl;
+    
+    if (typeof window !== 'undefined') {
+      // Check if we're on localhost
+      if (window.location.origin.includes('localhost')) {
+        // Use localhost for development
+        redirectUrl = `${window.location.origin}/auth/callback`;
+      } else {
+        // Use production URL for production
+        redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
+      }
+    } else {
+      // Fallback to production URL
+      redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
+    }
+    
     console.log('Google OAuth redirectUrl:', redirectUrl);
       
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -29,11 +41,23 @@ export const auth = {
 
   // Sign in with Discord
   signInWithDiscord: async () => {
-    // Use the current URL's origin for the redirect
-    const redirectUrl = typeof window !== 'undefined' 
-      ? `${window.location.origin}/auth/callback` 
-      : (process.env.NEXT_PUBLIC_APP_URL || 'https://lunch-box-ai.vercel.app') + '/auth/callback';
-      
+    // Always use the production URL in production
+    let redirectUrl;
+    
+    if (typeof window !== 'undefined') {
+      // Check if we're on localhost
+      if (window.location.origin.includes('localhost')) {
+        // Use localhost for development
+        redirectUrl = `${window.location.origin}/auth/callback`;
+      } else {
+        // Use production URL for production
+        redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
+      }
+    } else {
+      // Fallback to production URL
+      redirectUrl = 'https://lunch-box-ai.vercel.app/auth/callback';
+    }
+    
     console.log('Discord OAuth redirectUrl:', redirectUrl);
       
     const { data, error } = await supabase.auth.signInWithOAuth({
