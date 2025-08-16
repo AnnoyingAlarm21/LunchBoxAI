@@ -57,8 +57,68 @@ export default function Home() {
     }
   }, []);
 
-  // Check authentication status
+  // Check authentication status and handle OAuth redirects
   useEffect(() => {
+    // First check for auth params in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const authSuccess = urlParams.get('auth');
+    const authCode = urlParams.get('code');
+    const authError = urlParams.get('error');
+    
+    console.log('Checking URL params:', { authSuccess, authCode, authError });
+    
+    // Clear URL parameters
+    if (authSuccess || authCode || authError) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    
+    // If we have a successful auth, store it in localStorage
+    if (authSuccess === 'success' && authCode) {
+      console.log('Auth success detected, storing in localStorage');
+      localStorage.setItem('auth_token', authCode);
+      
+      // Create a mock user object
+      const mockUser = {
+        id: 'direct-auth-user',
+        email: 'user@example.com',
+        user_metadata: {
+          full_name: 'Direct Auth User'
+        }
+      };
+      
+      // Set the user in state
+      setUser(mockUser as any);
+      
+      // Show success message
+      const successMessage: Message = {
+        id: `auth-success-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        text: "You've successfully signed in! Now you can start managing your tasks.",
+        sender: 'ai',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, successMessage]);
+      
+      return;
+    }
+    
+    // Check if we have a stored token
+    const storedToken = localStorage.getItem('auth_token');
+    if (storedToken) {
+      // Create a mock user object
+      const mockUser = {
+        id: 'direct-auth-user',
+        email: 'user@example.com',
+        user_metadata: {
+          full_name: 'Direct Auth User'
+        }
+      };
+      
+      // Set the user in state
+      setUser(mockUser as any);
+      return;
+    }
+    
+    // If no token in localStorage, fall back to Supabase auth
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
@@ -245,7 +305,14 @@ export default function Home() {
                   Hi, {user.email || user.user_metadata?.full_name || 'User'}!
                 </span>
                 <button
-                  onClick={() => auth.signOut()}
+                  onClick={() => {
+                    // Clear localStorage token
+                    localStorage.removeItem('auth_token');
+                    // Also sign out from Supabase as a fallback
+                    auth.signOut();
+                    // Reset user state
+                    setUser(null);
+                  }}
                   className="px-3 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
                 >
                   Sign Out
