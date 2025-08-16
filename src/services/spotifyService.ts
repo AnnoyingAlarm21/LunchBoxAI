@@ -69,7 +69,7 @@ export class SpotifyService {
   }
 
   // Handle authentication callback - now handled by Supabase
-  async handleCallback(_code: string): Promise<boolean> {
+  async handleCallback(): Promise<boolean> {
     // This is now handled by Supabase OAuth
     // The access token will be available through Supabase session
     return true;
@@ -91,7 +91,7 @@ export class SpotifyService {
       console.log('========================');
       
       // Only return true if we have a Spotify provider token (not Google)
-      if (hasProviderToken && provider === 'spotify') {
+      if (hasProviderToken && provider === 'spotify' && session.provider_token) {
         // Check if it's not a Google token
         if (!session.provider_token.startsWith('ya29.')) {
           return true;
