@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     // Handle OAuth errors
     console.log('OAuth error, redirecting to main page with error');
     return NextResponse.redirect(
-      'http://localhost:3000?error=' + error
+      `${process.env.NEXT_PUBLIC_APP_URL || 'https://lunch-box-ai.vercel.app'}?error=` + error
     );
   }
 
@@ -19,11 +19,11 @@ export async function GET(request: NextRequest) {
     // Successful OAuth - redirect back to main page
     console.log('OAuth success, redirecting to main page');
     return NextResponse.redirect(
-      'http://localhost:3000?auth=success&code=' + code
+      `${process.env.NEXT_PUBLIC_APP_URL || 'https://lunch-box-ai.vercel.app'}?auth=success&code=` + code
     );
   }
 
   // No code or error - redirect to main page
   console.log('No OAuth params, redirecting to main page');
-  return NextResponse.redirect('http://localhost:3000');
+  return NextResponse.redirect(process.env.NEXT_PUBLIC_APP_URL || 'https://lunch-box-ai.vercel.app');
 }

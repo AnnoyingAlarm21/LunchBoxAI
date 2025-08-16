@@ -47,8 +47,8 @@ export class SpotifyService {
   async authenticate(): Promise<void> {
     // Use direct Spotify OAuth instead of Supabase
     const clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID;
-    const redirectUri = process.env.NODE_ENV === 'development' 
-      ? 'http://localhost:3000/auth/spotify/callback'
+    const redirectUri = process.env.NEXT_PUBLIC_APP_URL 
+      ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/spotify/callback`
       : 'https://lunch-box-ai.vercel.app/auth/spotify/callback';
     
     const scopes = [

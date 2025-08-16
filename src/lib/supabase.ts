@@ -33,8 +33,8 @@ export const auth = {
 
   // Sign in with Spotify
   signInWithSpotify: async () => {
-    const redirectUrl = process.env.NODE_ENV === 'development' 
-      ? 'http://localhost:3000/auth/callback'
+    const redirectUrl = process.env.NEXT_PUBLIC_APP_URL 
+      ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
       : 'https://lunch-box-ai.vercel.app/auth/callback';
     
     console.log('Supabase Spotify OAuth - redirectUrl:', redirectUrl);
