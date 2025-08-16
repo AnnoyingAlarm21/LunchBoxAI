@@ -1,4 +1,3 @@
-import { API_CONFIG, API_ENDPOINTS } from '@/config/api';
 import { supabase } from '@/lib/supabase';
 
 export interface SpotifyTrack {
@@ -70,7 +69,7 @@ export class SpotifyService {
   }
 
   // Handle authentication callback - now handled by Supabase
-  async handleCallback(code: string): Promise<boolean> {
+  async handleCallback(_code: string): Promise<boolean> {
     // This is now handled by Supabase OAuth
     // The access token will be available through Supabase session
     return true;
@@ -81,7 +80,6 @@ export class SpotifyService {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const hasProviderToken = !!session?.provider_token;
-      const hasUser = !!session?.user;
       const provider = session?.user?.app_metadata?.provider;
       
       console.log('=== SPOTIFY AUTH DEBUG ===');
@@ -123,7 +121,7 @@ export class SpotifyService {
       console.log('==========================');
       
       // For Spotify, we need the provider_token to be a valid Spotify token
-      let spotifyToken = providerToken;
+      const spotifyToken = providerToken;
       
       if (!spotifyToken) {
         throw new Error('Not authenticated with Spotify - no provider token found');
