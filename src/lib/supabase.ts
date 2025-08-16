@@ -11,10 +11,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const auth = {
   // Sign in with Google
   signInWithGoogle: async () => {
+    // Use the current URL's origin for the redirect
+    const redirectUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/auth/callback` 
+      : (process.env.NEXT_PUBLIC_APP_URL || 'https://lunch-box-ai.vercel.app') + '/auth/callback';
+      
+    console.log('Google OAuth redirectUrl:', redirectUrl);
+      
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`
+        redirectTo: redirectUrl
       }
     });
     return { data, error };
@@ -22,10 +29,17 @@ export const auth = {
 
   // Sign in with Discord
   signInWithDiscord: async () => {
+    // Use the current URL's origin for the redirect
+    const redirectUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/auth/callback` 
+      : (process.env.NEXT_PUBLIC_APP_URL || 'https://lunch-box-ai.vercel.app') + '/auth/callback';
+      
+    console.log('Discord OAuth redirectUrl:', redirectUrl);
+      
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'discord',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`
+        redirectTo: redirectUrl
       }
     });
     return { data, error };
