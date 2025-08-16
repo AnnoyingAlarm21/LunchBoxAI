@@ -1,102 +1,427 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { PaperAirplaneIcon, PaperClipIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
+import { motion, AnimatePresence } from 'framer-motion';
+import { groqService, GroqMessage } from '@/services/groqService';
+import { userProfileService, UserProfile } from '@/services/userProfileService';
+import { spotifyService, SpotifyTrack } from '@/services/spotifyService';
+import MusicPlayer from '@/components/MusicPlayer';
+import { auth, supabase } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
+
+interface Message {
+  id: string;
+  text: string;
+  sender: 'user' | 'ai';
+  timestamp: Date;
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [musicSuggestions, setMusicSuggestions] = useState<SpotifyTrack[]>([]);
+  const [showMusicPlayer, setShowMusicPlayer] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Check for existing user profile on component mount
+  useEffect(() => {
+    const existingProfile = userProfileService.loadProfile();
+    if (existingProfile && existingProfile.onboardingComplete) {
+      setUserProfile(existingProfile);
+      // Add welcome back message
+      const welcomeBackMessage: Message = {
+        id: Date.now().toString(),
+        text: "Welcome back! What's on your plate today?",
+        sender: 'ai',
+        timestamp: new Date()
+      };
+      setMessages([welcomeBackMessage]);
+    } else {
+      // Start onboarding in chat
+      const onboardingMessage: Message = {
+        id: Date.now().toString(),
+        text: "Hey! I'm your Lunchbox.ai buddy. Let me get to know you first. Do you play sports?",
+        sender: 'ai',
+        timestamp: new Date()
+      };
+      setMessages([onboardingMessage]);
+    }
+  }, []);
+
+  // Check authentication status
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+
+    getUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSendMessage = async () => {
+    if (!inputText.trim()) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: inputText,
+      sender: 'user',
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputText('');
+    setIsTyping(true);
+
+    try {
+      if (!userProfile?.onboardingComplete) {
+        // Handle onboarding responses
+        const onboardingResponse = handleOnboardingResponse(inputText);
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: onboardingResponse.text,
+          sender: 'ai',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, aiMessage]);
+        
+        if (onboardingResponse.complete) {
+          const completedProfile = userProfileService.completeOnboarding(onboardingResponse.interests);
+          if (completedProfile) {
+            setUserProfile(completedProfile);
+            const welcomeMessage: Message = {
+              id: (Date.now() + 2).toString(),
+              text: "Perfect! Now what's on your plate today?",
+              sender: 'ai',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, welcomeMessage]);
+          }
+        }
+      } else {
+        // Check for music requests first
+        await checkForMusicRequest(inputText);
+        
+        // Normal AI chat
+        const groqMessages: GroqMessage[] = messages.map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: msg.text
+        }));
+
+        groqMessages.push({
+          role: 'user',
+          content: inputText
+        });
+
+        const aiResponse = await groqService.chat(groqMessages);
+        
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: aiResponse,
+          sender: 'ai',
+          timestamp: new Date()
+        };
+
+        setMessages(prev => [...prev, aiMessage]);
+      }
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: "Sorry, I'm having trouble connecting right now. Please try again later.",
+        sender: 'ai',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  const handleOnboardingResponse = (userInput: string) => {
+    const lowerInput = userInput.toLowerCase();
+    const currentStep = messages.filter(m => m.sender === 'ai').length - 1;
+    
+    if (currentStep === 1) {
+      // Sports question
+      const likesSports = lowerInput.includes('yes') || lowerInput.includes('yeah') || lowerInput.includes('sure');
+      return {
+        text: likesSports ? "Cool! Do you like to go out with friends?" : "Got it. Do you like to go out with friends?",
+        interests: { sports: likesSports, socializing: false, gaming: false, otherInterests: [] },
+        complete: false
+      };
+    } else if (currentStep === 2) {
+      // Socializing question
+      const likesSocializing = lowerInput.includes('yes') || lowerInput.includes('yeah') || lowerInput.includes('sure');
+      return {
+        text: likesSocializing ? "Nice! Do you play games with friends?" : "Got it. Do you play games with friends?",
+        interests: { sports: true, socializing: likesSocializing, gaming: false, otherInterests: [] },
+        complete: false
+      };
+    } else if (currentStep === 3) {
+      // Gaming question
+      const likesGaming = lowerInput.includes('yes') || lowerInput.includes('yeah') || lowerInput.includes('sure');
+      return {
+        text: "Anything else you like?",
+        interests: { sports: true, socializing: true, gaming: likesGaming, otherInterests: [] },
+        complete: false
+      };
+    } else if (currentStep === 4) {
+      // Other interests
+      return {
+        text: "Got it! What's on your plate today?",
+        interests: { sports: true, socializing: true, gaming: true, otherInterests: [userInput] },
+        complete: true
+      };
+    }
+    
+    return {
+      text: "Do you play sports?",
+      interests: { sports: false, socializing: false, gaming: false, otherInterests: [] },
+      complete: false
+    };
+  };
+
+  // Check if user input is music-related and get suggestions
+  const checkForMusicRequest = async (userInput: string) => {
+    const musicKeywords = ['music', 'song', 'playlist', 'spotify', 'listen', 'sound', 'beat', 'rhythm', 'melody', 'tune'];
+    const hasMusicKeyword = musicKeywords.some(keyword => userInput.toLowerCase().includes(keyword));
+    
+    if (hasMusicKeyword && spotifyService.isAuthenticated()) {
+      try {
+        const suggestions = await spotifyService.getMusicSuggestions(userInput);
+        if (suggestions.length > 0) {
+          setMusicSuggestions(suggestions);
+          setShowMusicPlayer(true);
+          return true;
+        }
+      } catch (error) {
+        console.error('Error getting music suggestions:', error);
+      }
+    }
+    return false;
+  };
+
+  // Handle playing a track
+  const handlePlayTrack = async (trackId: string) => {
+    try {
+      await spotifyService.playTrack(trackId);
+    } catch (error) {
+      console.error('Error playing track:', error);
+    }
+  };
+
+  // Handle creating a playlist
+  const handleCreatePlaylist = async (tracks: SpotifyTrack[]) => {
+    try {
+      const playlistUrl = await spotifyService.createPlaylist('Task Music', tracks);
+      if (playlistUrl) {
+        // Add message about playlist creation
+        const playlistMessage: Message = {
+          id: Date.now().toString(),
+          text: `I've created a Spotify playlist for you! Check it out: ${playlistUrl}`,
+          sender: 'ai',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, playlistMessage]);
+      }
+    } catch (error) {
+      console.error('Error creating playlist:', error);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col">
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-pink-500 rounded-lg flex items-center justify-center">
+              <span className="text-white text-lg">🥪</span>
+            </div>
+            <h1 className="text-xl font-semibold text-gray-800">Lunchbox.ai</h1>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            {!spotifyService.isAuthenticated() && (
+              <button
+                onClick={() => spotifyService.authenticate()}
+                className="px-3 py-2 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              >
+                Connect Spotify
+              </button>
+            )}
+            
+            {!user ? (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => auth.signInWithGoogle()}
+                  className="px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  Sign in with Google
+                </button>
+                <button
+                  onClick={() => auth.signInWithDiscord()}
+                  className="px-3 py-2 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                >
+                  Sign in with Discord
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">
+                  Hi, {user.email || user.user_metadata?.full_name || 'User'}!
+                </span>
+                <button
+                  onClick={() => auth.signOut()}
+                  className="px-3 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 flex items-center justify-center px-6 py-12">
+        <div className="max-w-2xl w-full text-center">
+          {/* Main Heading */}
+          <h2 className="text-3xl font-semibold text-gray-800 mb-8">
+            What can I help you pack today?
+          </h2>
+
+          {/* Chat Messages - Moved above input */}
+          {messages.length > 0 && (
+            <div className="mb-8 max-h-96 overflow-y-auto scrollbar-hide">
+              <div className="space-y-4">
+                <AnimatePresence>
+                  {messages.map((message) => (
+                    <motion.div
+                      key={message.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-xs px-4 py-2 rounded-2xl ${
+                          message.sender === 'user'
+                            ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        <p className="text-sm whitespace-pre-line">{message.text}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                  
+                  {isTyping && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex justify-start"
+                    >
+                      <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-2xl">
+                        <div className="flex space-x-1">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+          )}
+
+          {/* Music Player */}
+          {showMusicPlayer && musicSuggestions.length > 0 && (
+            <MusicPlayer
+              tracks={musicSuggestions}
+              onPlayTrack={handlePlayTrack}
+              onCreatePlaylist={handleCreatePlaylist}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          )}
+
+          {/* Chat Input */}
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="flex items-center space-x-2 px-3 py-2 bg-gray-100 rounded-lg">
+                <span className="text-sm font-medium text-gray-700">o3-mini</span>
+                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+              </div>
+              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <GlobeAltIcon className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+            
+            <div className="flex items-center space-x-3">
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                placeholder="Tell me what's on your plate today..."
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-left"
+              />
+              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <PaperClipIcon className="w-5 h-5 text-gray-600" />
+              </button>
+              <button
+                onClick={handleSendMessage}
+                className="p-3 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl hover:from-orange-600 hover:to-pink-600 transition-all duration-200"
+              >
+                <PaperAirplaneIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      {/* Footer */}
+      <footer className="bg-white/80 backdrop-blur-sm border-t border-gray-200 py-6">
+        <div className="max-w-4xl mx-auto px-6 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <span className="text-gray-600">X</span>
+            </button>
+            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <span className="text-gray-600">GitHub</span>
+            </button>
+            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <span className="text-gray-600">Discord</span>
+            </button>
+          </div>
+          
+          <div className="flex items-center space-x-4 text-sm text-gray-600">
+            <a href="#" className="hover:text-gray-800 transition-colors">Privacy</a>
+            <span>/</span>
+            <a href="#" className="hover:text-gray-800 transition-colors">Terms</a>
+            <span>/</span>
+            <a href="#" className="hover:text-gray-800 transition-colors">Help center</a>
+          </div>
+        </div>
       </footer>
     </div>
   );
